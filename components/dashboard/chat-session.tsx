@@ -39,6 +39,7 @@ import {
   type ProviderId,
 } from "@/lib/llm/models";
 import { createOllamaTransport } from "@/lib/llm/ollama-transport";
+import { useChatModelStore } from "@/lib/store/chat-model-store";
 import { useOllamaStore } from "@/lib/store/ollama-store";
 import { cn } from "@/lib/utils";
 
@@ -112,10 +113,22 @@ function ActiveChat({
   initialMessages: UIMessage[];
 }) {
   const sessionId = session.id;
-  const [provider, setProvider] = useState<ProviderId>(
-    session.provider ?? DEFAULT_PROVIDER,
+  // Cached pick wins over the DB's last-saved value: the cache updates the
+  // instant you change the dropdown, while chat_sessions.provider/model
+  // only updates after a message finishes streaming.
+  const cachedChoice = useChatModelStore((s) => s.bySession[sessionId]);
+  const setCachedChoice = useChatModelStore((s) => s.setChoice);
+  const [provider, setProviderState] = useState<ProviderId>(
+    cachedChoice?.provider ?? session.provider ?? DEFAULT_PROVIDER,
   );
-  const [model, setModel] = useState(session.model ?? DEFAULT_MODEL);
+  const [model, setModelState] = useState(cachedChoice?.model ?? session.model ?? DEFAULT_MODEL);
+
+  function selectModel(nextProvider: ProviderId, nextModel: string) {
+    setProviderState(nextProvider);
+    setModelState(nextModel);
+    setCachedChoice(sessionId, { provider: nextProvider, model: nextModel });
+  }
+
   const ollamaModels = useOllamaStore((s) => s.models);
   const isOllama = provider === OLLAMA_PROVIDER_ID;
 
@@ -233,8 +246,7 @@ function ActiveChat({
             const separatorIndex = value.indexOf(":");
             const nextProvider = value.slice(0, separatorIndex) as ProviderId;
             const nextModel = value.slice(separatorIndex + 1);
-            setProvider(nextProvider);
-            setModel(nextModel);
+            selectModel(nextProvider, nextModel);
           }}>
           <SelectTrigger className="mb-2 h-8 w-56 text-xs">
             <SelectValue placeholder="Model" />
