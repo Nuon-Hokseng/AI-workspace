@@ -12,6 +12,8 @@ import { formatStreamError } from "@/lib/llm/format-error";
 import { isKnownProvider, PROVIDERS } from "@/lib/llm/models";
 import { getModel } from "@/lib/llm/providers";
 import { indexContent, searchMemory } from "@/lib/rag";
+import { harvestChatLinks } from "@/app/(dashboard)/extract-actions";
+import { buildMemorySystemPrompt } from "@/lib/llm/memory-prompt";
 
 // Below this, an exchange isn't worth spending an embedding call on.
 const MIN_CHARS_TO_INDEX = 400;
@@ -107,14 +109,7 @@ export async function POST(req: Request) {
   const relevantChunks = await searchMemory(projectId, userText);
 
   const modelMessages: ModelMessage[] = [
-    ...(relevantChunks.length > 0
-      ? [
-          {
-            role: "system" as const,
-            content: `Relevant context from this project's memory:\n\n${relevantChunks.join("\n\n---\n\n")}`,
-          },
-        ]
-      : []),
+    { role: "system", content: buildMemorySystemPrompt(relevantChunks) },
     ...history.map((m): ModelMessage => ({ role: m.role, content: m.content })),
     currentMessage,
   ];
@@ -152,6 +147,9 @@ export async function POST(req: Request) {
         set provider = ${provider}, model = ${model}
         where id = ${sessionId} and project_id = ${projectId}
       `;
+
+      // URLs the user shared land in the Links tab automatically.
+      await harvestChatLinks(projectId, userText);
 
       const exchangeText = `${userText}\n\n${text}`;
       if (exchangeText.length >= MIN_CHARS_TO_INDEX) {

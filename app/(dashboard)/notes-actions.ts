@@ -7,12 +7,13 @@ export type NoteRow = {
   id: string;
   meeting_date: string | null;
   content: string;
+  digested_at: Date | null;
   updated_at: Date;
 };
 
 export async function getNotes(projectId: string): Promise<NoteRow[]> {
   return sql<NoteRow[]>`
-    select id, meeting_date::text as meeting_date, content, updated_at
+    select id, meeting_date::text as meeting_date, content, digested_at, updated_at
     from project_notes
     where project_id = ${projectId}
     order by meeting_date desc nulls last, created_at desc
@@ -23,15 +24,16 @@ export async function createNote(
   projectId: string,
   meetingDate: string,
   content: string,
-) {
+): Promise<string | null> {
   const trimmed = content.trim();
-  if (!trimmed) return;
+  if (!trimmed) return null;
   const [note] = await sql<{ id: string }[]>`
     insert into project_notes (project_id, meeting_date, content)
     values (${projectId}, ${meetingDate || null}, ${trimmed})
     returning id
   `;
   await indexNoteSafely(projectId, note.id, trimmed);
+  return note.id;
 }
 
 export async function updateNote(
@@ -42,9 +44,10 @@ export async function updateNote(
 ) {
   const trimmed = content.trim();
   if (!trimmed) return;
+  // Content changed, so any previous digestion no longer reflects it.
   await sql`
     update project_notes
-    set meeting_date = ${meetingDate || null}, content = ${trimmed}
+    set meeting_date = ${meetingDate || null}, content = ${trimmed}, digested_at = null
     where id = ${id}
   `;
   await indexNoteSafely(projectId, id, trimmed);

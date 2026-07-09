@@ -4,6 +4,7 @@ import { sql } from "@/lib/db";
 import { decrypt, encrypt } from "@/lib/crypto";
 import { DEFAULT_MODEL, DEFAULT_PROVIDER, OLLAMA_PROVIDER_ID, type ProviderId } from "@/lib/llm/models";
 import { indexContent, searchMemory } from "@/lib/rag";
+import { harvestChatLinks } from "@/app/(dashboard)/extract-actions";
 
 const MIN_CHARS_TO_INDEX = 400;
 
@@ -63,6 +64,9 @@ export async function saveOllamaExchange(
     set provider = ${OLLAMA_PROVIDER_ID}, model = ${model}
     where id = ${sessionId} and project_id = ${projectId}
   `;
+
+  // Same auto-filing as the cloud chat path: shared URLs -> Links tab.
+  await harvestChatLinks(projectId, userText);
 
   const exchangeText = `${userText}\n\n${assistantText}`;
   if (exchangeText.length >= MIN_CHARS_TO_INDEX) {

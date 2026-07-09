@@ -99,14 +99,12 @@ export function ProjectSidebar({
     });
   }
 
-  // Collapsed is a deliberate "get this out of the way" state, not a
-  // squeezed-down version of the full sidebar -- at panel widths that
-  // narrow, truncated labels and a barely-visible active row just look
-  // broken (a project name clipped to a couple of letters isn't useful to
-  // anyone). Show only the one action that still makes sense at that size.
+  // Collapsed keeps the sidebar usable at icon width: the New Project
+  // button plus one initial-letter tile per project (full name on hover),
+  // so switching projects doesn't require re-expanding the panel.
   if (collapsed) {
     return (
-      <div className="flex h-full flex-col items-center overflow-hidden p-2">
+      <div className="flex h-full flex-col items-center gap-1 overflow-y-auto overflow-x-hidden p-2">
         <Button
           variant="outline"
           size="icon"
@@ -116,6 +114,20 @@ export function ProjectSidebar({
         >
           <Plus className="size-4" />
         </Button>
+        {projects.map((project) => (
+          <button
+            key={project.id}
+            title={project.name}
+            aria-label={project.name}
+            onClick={() => setActiveProject(project.id, project.name)}
+            className={cn(
+              "flex size-9 shrink-0 items-center justify-center rounded-md border text-sm font-semibold hover:bg-accent hover:text-accent-foreground",
+              activeProjectId === project.id && "bg-accent text-accent-foreground",
+            )}
+          >
+            {project.name.trim().charAt(0).toUpperCase()}
+          </button>
+        ))}
         <Dialog open={newProjectOpen} onOpenChange={setNewProjectOpen}>
           <DialogContent>
             <DialogHeader>

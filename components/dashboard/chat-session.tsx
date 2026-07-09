@@ -9,9 +9,13 @@ import {
   type ChatTransport,
   type UIMessage,
 } from "ai";
-import { Paperclip, Send } from "lucide-react";
+import { Paperclip, Send, Square } from "lucide-react";
 
-import { getMessages, type ChatMessageRow, type ChatSessionRow } from "@/app/(dashboard)/chat-actions";
+import {
+  getMessages,
+  type ChatMessageRow,
+  type ChatSessionRow,
+} from "@/app/(dashboard)/chat-actions";
 import { QueryError } from "@/components/dashboard/query-error";
 import { Button } from "@/components/ui/button";
 import {
@@ -68,7 +72,9 @@ export function ChatSession({
   projectId: string;
   session: ChatSessionRow;
 }) {
-  const { state, refetch } = useProjectQuery(session.id, (id) => getMessages(id, projectId));
+  const { state, refetch } = useProjectQuery(session.id, (id) =>
+    getMessages(id, projectId),
+  );
 
   if (state.status === "error") {
     return (
@@ -106,7 +112,9 @@ function ActiveChat({
   initialMessages: UIMessage[];
 }) {
   const sessionId = session.id;
-  const [provider, setProvider] = useState<ProviderId>(session.provider ?? DEFAULT_PROVIDER);
+  const [provider, setProvider] = useState<ProviderId>(
+    session.provider ?? DEFAULT_PROVIDER,
+  );
   const [model, setModel] = useState(session.model ?? DEFAULT_MODEL);
   const ollamaModels = useOllamaStore((s) => s.models);
   const isOllama = provider === OLLAMA_PROVIDER_ID;
@@ -130,7 +138,7 @@ function ActiveChat({
     [isOllama, provider, model, projectId, sessionId],
   );
 
-  const { messages, sendMessage, status, error } = useChat({
+  const { messages, sendMessage, stop, status, error } = useChat({
     id: sessionId,
     messages: initialMessages,
     transport,
@@ -172,16 +180,14 @@ function ActiveChat({
             className={cn(
               "flex",
               message.role === "user" ? "justify-end" : "justify-start",
-            )}
-          >
+            )}>
             <div
               className={cn(
                 "max-w-[80%] rounded-lg px-3 py-2 text-sm",
                 message.role === "user"
                   ? "bg-primary text-primary-foreground"
-                  : "bg-muted",
-              )}
-            >
+                  : "bg-muted text-white",
+              )}>
               {message.parts.map((part, i) => {
                 if (isTextUIPart(part)) {
                   return (
@@ -197,8 +203,7 @@ function ActiveChat({
                       href={part.url}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="mt-1 block text-xs underline underline-offset-4"
-                    >
+                      className="mt-1 block text-xs underline underline-offset-4">
                       📎 {part.filename || "attachment"}
                     </a>
                   );
@@ -230,8 +235,7 @@ function ActiveChat({
             const nextModel = value.slice(separatorIndex + 1);
             setProvider(nextProvider);
             setModel(nextModel);
-          }}
-        >
+          }}>
           <SelectTrigger className="mb-2 h-8 w-56 text-xs">
             <SelectValue placeholder="Model" />
           </SelectTrigger>
@@ -280,9 +284,12 @@ function ActiveChat({
             size="icon"
             variant="outline"
             disabled={busy || isOllama}
-            title={isOllama ? "Attachments aren't saved to Documents for local models yet" : undefined}
-            onClick={() => fileInputRef.current?.click()}
-          >
+            title={
+              isOllama
+                ? "Attachments aren't saved to Documents for local models yet"
+                : undefined
+            }
+            onClick={() => fileInputRef.current?.click()}>
             <Paperclip className="size-4" />
           </Button>
           <Textarea
@@ -299,9 +306,22 @@ function ActiveChat({
             }}
             className="min-h-9 resize-none"
           />
-          <Button size="icon" disabled={busy} onClick={handleSend}>
-            <Send className="size-4" />
-          </Button>
+          {busy ? (
+            <Button
+              size="icon"
+              variant="destructive"
+              title="Stop generating"
+              // Aborting makes stop()'s own promise reject with AbortError --
+              // that's the expected outcome of cancelling, not an error.
+              onClick={() => void Promise.resolve(stop()).catch(() => {})}
+            >
+              <Square className="size-4" />
+            </Button>
+          ) : (
+            <Button size="icon" onClick={handleSend}>
+              <Send className="size-4" />
+            </Button>
+          )}
         </div>
       </div>
     </div>

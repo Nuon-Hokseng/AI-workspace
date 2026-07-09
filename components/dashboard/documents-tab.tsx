@@ -47,10 +47,10 @@ export function DocumentsTab({ projectId }: { projectId: string | null }) {
   }
 
   return (
-    <div className="space-y-3">
+    <div className="flex h-full min-h-0 flex-col gap-3">
       <div
         className={cn(
-          "flex flex-col items-center justify-center gap-2 rounded-md border border-dashed p-6 text-center text-sm text-muted-foreground",
+          "flex shrink-0 flex-col items-center justify-center gap-2 rounded-md border border-dashed p-6 text-center text-sm text-muted-foreground",
           isDragging && "border-primary bg-accent",
         )}
         onDragOver={(e) => {
@@ -86,6 +86,7 @@ export function DocumentsTab({ projectId }: { projectId: string | null }) {
         />
       </div>
 
+      <div className="min-h-0 flex-1 overflow-y-auto">
       {state.status === "loading" && <ListSkeleton />}
 
       {state.status === "error" && <QueryError onRetry={refetch} error={state.error} />}
@@ -132,6 +133,7 @@ export function DocumentsTab({ projectId }: { projectId: string | null }) {
           ))}
         </ul>
       )}
+      </div>
     </div>
   );
 }

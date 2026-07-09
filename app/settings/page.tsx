@@ -2,6 +2,7 @@ import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 
 import { ApiKeysManager } from "@/components/settings/api-keys-manager";
+import { BackgroundAiSection } from "@/components/settings/background-ai-section";
 import { OllamaSection } from "@/components/settings/ollama-section";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/theme-toggle";
@@ -34,6 +35,11 @@ export default function SettingsPage() {
           Keys are encrypted at rest and never shown in full once saved.
         </p>
         <ApiKeysManager />
+      </section>
+
+      <section className="space-y-2">
+        <h2 className="text-sm font-semibold text-muted-foreground">Background AI</h2>
+        <BackgroundAiSection />
       </section>
 
       <section className="space-y-2">

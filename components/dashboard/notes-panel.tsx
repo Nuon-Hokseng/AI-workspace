@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useTransition } from "react";
-import { Pencil, Trash2 } from "lucide-react";
+import { useRef, useState, useTransition } from "react";
+import { Paperclip, Pencil, Trash2 } from "lucide-react";
 
 import {
   createNote,
@@ -10,6 +10,8 @@ import {
   updateNote,
   type NoteRow,
 } from "@/app/(dashboard)/notes-actions";
+import { uploadDocument } from "@/app/(dashboard)/documents-actions";
+import { runBackgroundExtraction, runTeamAnalysis } from "@/lib/extract-client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -27,6 +29,28 @@ export function NotesPanel({ projectId }: { projectId: string | null }) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [meetingDate, setMeetingDate] = useState(todayIsoDate());
   const [content, setContent] = useState("");
+  const [uploadedName, setUploadedName] = useState<string | null>(null);
+  const [digestingIds, setDigestingIds] = useState<Set<string>>(new Set());
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Fire-and-forget digestion, but tracked: the badge shows "Digesting…"
+  // while the pass runs, then refetch picks up the digested_at stamp (or
+  // its absence, if the pass was skipped/failed).
+  function digestInBackground(noteId: string, noteContent: string) {
+    setDigestingIds((prev) => new Set(prev).add(noteId));
+    void runBackgroundExtraction(projectId!, noteContent, noteId)
+      .finally(() => {
+        setDigestingIds((prev) => {
+          const next = new Set(prev);
+          next.delete(noteId);
+          return next;
+        });
+        refetch();
+      })
+      // Fresh logs/notes are new evidence -- silently refresh the Team
+      // Performance scores too (no-ops when no members or AI is off).
+      .then(() => runTeamAnalysis(projectId!));
+  }
 
   function resetEditor() {
     setEditingId(null);
@@ -42,14 +66,31 @@ export function NotesPanel({ projectId }: { projectId: string | null }) {
 
   function handleSave() {
     if (!projectId || !content.trim()) return;
+    const savedContent = content;
     startTransition(async () => {
+      let noteId: string | null;
       if (editingId) {
         await updateNote(editingId, projectId, meetingDate, content);
+        noteId = editingId;
       } else {
-        await createNote(projectId, meetingDate, content);
+        noteId = await createNote(projectId, meetingDate, content);
       }
       resetEditor();
       refetch();
+      // Background AI pass (links -> Links tab, progress -> Log tab).
+      // Deliberately not awaited: the note is already saved, and this
+      // never surfaces errors to the user.
+      if (noteId) digestInBackground(noteId, savedContent);
+    });
+  }
+
+  function handleUpload(file: File | null) {
+    if (!projectId || !file) return;
+    const formData = new FormData();
+    formData.set("file", file);
+    startTransition(async () => {
+      await uploadDocument(projectId, formData);
+      setUploadedName(file.name);
     });
   }
 
@@ -65,7 +106,7 @@ export function NotesPanel({ projectId }: { projectId: string | null }) {
   }
 
   return (
-    <div className="border-t p-3">
+    <div className="flex max-h-[60%] min-h-0 flex-col border-t p-3">
       <h3 className="mb-2 text-sm font-semibold">Notes</h3>
 
       <div className="space-y-2">
@@ -80,7 +121,7 @@ export function NotesPanel({ projectId }: { projectId: string | null }) {
           value={content}
           onChange={(e) => setContent(e.target.value)}
         />
-        <div className="flex gap-2">
+        <div className="flex items-center gap-2">
           <Button size="sm" disabled={isPending || !content.trim()} onClick={handleSave}>
             {editingId ? "Update note" : "Save note"}
           </Button>
@@ -89,10 +130,33 @@ export function NotesPanel({ projectId }: { projectId: string | null }) {
               Cancel
             </Button>
           )}
+          <input
+            ref={fileInputRef}
+            type="file"
+            className="hidden"
+            onChange={(e) => {
+              handleUpload(e.target.files?.[0] ?? null);
+              e.target.value = "";
+            }}
+          />
+          <Button
+            size="sm"
+            variant="ghost"
+            disabled={isPending}
+            title="Attach a file — it's saved to this project's Documents"
+            onClick={() => fileInputRef.current?.click()}
+          >
+            <Paperclip className="size-3.5" />
+          </Button>
         </div>
+        {uploadedName && (
+          <p className="text-xs text-muted-foreground">
+            Saved “{uploadedName}” to this project&apos;s Documents.
+          </p>
+        )}
       </div>
 
-      <div className="mt-4 space-y-1">
+      <div className="mt-4 h-100 min-h-0 flex-1 space-y-1 overflow-y-auto">
         {state.status === "loading" && <ListSkeleton />}
 
         {state.status === "error" && <QueryError onRetry={refetch} error={state.error} />}
@@ -108,7 +172,26 @@ export function NotesPanel({ projectId }: { projectId: string | null }) {
                 <p className="text-xs text-muted-foreground">
                   {note.meeting_date ?? "No date"}
                 </p>
-                <div className="flex gap-1">
+                <div className="flex items-center gap-1">
+                  {digestingIds.has(note.id) ? (
+                    <span className="animate-pulse rounded-full border px-1.5 py-0.5 text-[10px] text-muted-foreground">
+                      Digesting…
+                    </span>
+                  ) : note.digested_at ? (
+                    <span
+                      className="rounded-full border border-green-600/40 bg-green-600/10 px-1.5 py-0.5 text-[10px] text-green-600 dark:text-green-500"
+                      title="AI digested this note — links and progress were filed to the Links/Log tabs and saved to project memory"
+                    >
+                      ✓ Digested
+                    </span>
+                  ) : (
+                    <span
+                      className="rounded-full border px-1.5 py-0.5 text-[10px] text-muted-foreground"
+                      title="Not digested yet — edit and re-save this note to run the background AI pass"
+                    >
+                      Not digested
+                    </span>
+                  )}
                   <Button
                     size="icon"
                     variant="ghost"

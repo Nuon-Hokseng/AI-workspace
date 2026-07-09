@@ -9,6 +9,7 @@ import {
 } from "ai";
 import { getRelevantContext, saveOllamaExchange } from "@/app/(dashboard)/chat-actions";
 import { formatStreamError } from "@/lib/llm/format-error";
+import { buildMemorySystemPrompt } from "@/lib/llm/memory-prompt";
 import { OLLAMA_BASE_URL } from "@/lib/store/ollama-store";
 
 // Ollama runs on the user's own machine. Our server (Railway) has no way
@@ -36,26 +37,21 @@ export function createOllamaTransport(
   });
 
   return {
-    async sendMessages({ messages }) {
+    async sendMessages({ messages, abortSignal }) {
       const lastMessage = messages[messages.length - 1];
       const userText = lastMessage.parts.filter(isTextUIPart).map((p) => p.text).join("\n");
 
       const relevantChunks = await getRelevantContext(context.projectId, userText);
-      const modelMessages: ModelMessage[] = [
-        ...(relevantChunks.length > 0
-          ? [
-              {
-                role: "system" as const,
-                content: `Relevant context from this project's memory:\n\n${relevantChunks.join("\n\n---\n\n")}`,
-              },
-            ]
-          : []),
-        ...(await convertToModelMessages(messages)),
-      ];
+      const modelMessages: ModelMessage[] = await convertToModelMessages(messages);
 
       const result = streamText({
         model: ollama(modelId),
+        // AI SDK v7: system text must go in `instructions`, not a system message
+        instructions: buildMemorySystemPrompt(relevantChunks),
         messages: modelMessages,
+        // Without this, the Stop button only stops rendering -- Ollama
+        // would keep generating on the user's machine until done.
+        abortSignal,
         onFinish: async ({ text, usage }) => {
           if (!text.trim()) return;
           await saveOllamaExchange(

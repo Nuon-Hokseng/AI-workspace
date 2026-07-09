@@ -29,8 +29,8 @@ export function LogTab({ projectId }: { projectId: string | null }) {
   }
 
   return (
-    <div className="space-y-3">
-      <div className="flex gap-2">
+    <div className="flex h-full min-h-0 flex-col gap-3">
+      <div className="flex shrink-0 gap-2">
         <Input
           placeholder="Log entry"
           value={entry}
@@ -42,6 +42,7 @@ export function LogTab({ projectId }: { projectId: string | null }) {
         </Button>
       </div>
 
+      <div className="min-h-0 flex-1 overflow-y-auto">
       {state.status === "loading" && <ListSkeleton />}
 
       {state.status === "error" && <QueryError onRetry={refetch} error={state.error} />}
@@ -80,6 +81,7 @@ export function LogTab({ projectId }: { projectId: string | null }) {
           ))}
         </ul>
       )}
+      </div>
     </div>
   );
 }

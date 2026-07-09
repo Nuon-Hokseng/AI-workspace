@@ -59,20 +59,20 @@ export function ResizableShell({
           collapsible
           collapsedSize={4}
           minSize={20}
-          maxSize={25}
-          defaultSize={15}
+          maxSize={35}
+          defaultSize={20}
           onCollapse={() => setLeftCollapsed(true)}
           onExpand={() => setLeftCollapsed(false)}
-          className={cn(!leftCollapsed && "min-w-[190px]")}
+          className={cn(!leftCollapsed && "min-w-[120px]")}
         >
           <ProjectSidebar projects={projects} collapsed={leftCollapsed} />
         </ResizablePanel>
         <ResizableHandle withHandle />
-        <ResizablePanel minSize={40} defaultSize={50} className="min-w-[280px]">
+        <ResizablePanel minSize={40} defaultSize={50} className="min-w-[240px]">
           <main className="h-full overflow-y-auto p-4">{children}</main>
         </ResizablePanel>
         <ResizableHandle withHandle />
-        <ResizablePanel minSize={25} maxSize={40} defaultSize={30} className="min-w-[190px]">
+        <ResizablePanel minSize={25} maxSize={40} defaultSize={30} className="min-w-[120px]">
           <ToolsPanel />
         </ResizablePanel>
       </ResizablePanelGroup>
