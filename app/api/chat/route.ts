@@ -109,7 +109,6 @@ export async function POST(req: Request) {
   const relevantChunks = await searchMemory(projectId, userText);
 
   const modelMessages: ModelMessage[] = [
-    { role: "system", content: buildMemorySystemPrompt(relevantChunks) },
     ...history.map((m): ModelMessage => ({ role: m.role, content: m.content })),
     currentMessage,
   ];
@@ -131,6 +130,9 @@ export async function POST(req: Request) {
 
   const result = streamText({
     model: getModel(provider, model, apiKey),
+    // AI SDK v7: system text must go in `instructions`, not a system
+    // message (same as the Ollama transport).
+    instructions: buildMemorySystemPrompt(relevantChunks),
     messages: modelMessages,
     onFinish: async ({ text, usage }) => {
       await sql`
