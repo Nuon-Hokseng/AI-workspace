@@ -7,7 +7,6 @@ import type { ImperativePanelHandle } from "react-resizable-panels";
 
 import { ProjectSidebar } from "@/components/dashboard/project-sidebar";
 import { ToolsPanel } from "@/components/dashboard/tools-panel";
-import { ThemeToggle } from "@/components/theme-toggle";
 import { Button } from "@/components/ui/button";
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
 import { cn } from "@/lib/utils";
@@ -44,7 +43,6 @@ export function ResizableShell({
           <PanelLeft className="size-4" />
         </Button>
         <div className="ml-auto flex items-center gap-2">
-          <ThemeToggle />
           <Button variant="outline" size="icon" asChild>
             <Link href="/settings">
               <Settings className="size-4" />
@@ -53,7 +51,13 @@ export function ResizableShell({
         </div>
       </header>
 
-      <ResizablePanelGroup direction="horizontal" className="flex-1 overflow-hidden">
+      {/* autoSaveId persists the panel sizes to this device's localStorage,
+          so the layout survives reloads and restarts. */}
+      <ResizablePanelGroup
+        autoSaveId="dashboard-layout"
+        direction="horizontal"
+        className="flex-1 overflow-hidden"
+      >
         <ResizablePanel
           ref={leftPanelRef}
           collapsible

@@ -56,7 +56,7 @@ export function LogTab({ projectId }: { projectId: string | null }) {
           {state.data.map((log) => (
             <li
               key={log.id}
-              className="flex items-start gap-2 rounded-md border p-2 text-sm"
+              className="flex items-start gap-2 rounded-md border p-2 text-sm animate-in fade-in duration-300"
             >
               <div className="min-w-0 flex-1">
                 <p className="text-xs text-muted-foreground">

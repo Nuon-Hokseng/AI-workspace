@@ -5,7 +5,6 @@ import { ApiKeysManager } from "@/components/settings/api-keys-manager";
 import { BackgroundAiSection } from "@/components/settings/background-ai-section";
 import { OllamaSection } from "@/components/settings/ollama-section";
 import { Button } from "@/components/ui/button";
-import { ThemeToggle } from "@/components/theme-toggle";
 
 export const dynamic = "force-dynamic";
 
@@ -20,14 +19,6 @@ export default function SettingsPage() {
         </Button>
         <h1 className="text-xl font-semibold">Settings</h1>
       </div>
-
-      <section className="space-y-2">
-        <h2 className="text-sm font-semibold text-muted-foreground">Appearance</h2>
-        <div className="flex items-center justify-between rounded-md border p-3">
-          <span className="text-sm">Theme</span>
-          <ThemeToggle />
-        </div>
-      </section>
 
       <section className="space-y-2">
         <h2 className="text-sm font-semibold text-muted-foreground">API Keys</h2>

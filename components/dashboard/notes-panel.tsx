@@ -167,7 +167,10 @@ export function NotesPanel({ projectId }: { projectId: string | null }) {
 
         {state.status === "ready" &&
           state.data.map((note) => (
-            <div key={note.id} className="rounded-md border p-2 text-sm">
+            <div
+              key={note.id}
+              className="rounded-md border p-2 text-sm animate-in fade-in duration-300"
+            >
               <div className="flex items-start justify-between gap-2">
                 <p className="text-xs text-muted-foreground">
                   {note.meeting_date ?? "No date"}
@@ -179,7 +182,7 @@ export function NotesPanel({ projectId }: { projectId: string | null }) {
                     </span>
                   ) : note.digested_at ? (
                     <span
-                      className="rounded-full border border-green-600/40 bg-green-600/10 px-1.5 py-0.5 text-[10px] text-green-600 dark:text-green-500"
+                      className="rounded-full border border-green-600/40 bg-green-600/10 px-1.5 py-0.5 text-[10px] text-green-600 animate-in zoom-in duration-300 dark:text-green-500"
                       title="AI digested this note — links and progress were filed to the Links/Log tabs and saved to project memory"
                     >
                       ✓ Digested

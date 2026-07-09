@@ -100,7 +100,7 @@ export function DocumentsTab({ projectId }: { projectId: string | null }) {
           {state.data.map((doc) => (
             <li
               key={doc.id}
-              className="flex items-center gap-2 rounded-md border p-2 text-sm"
+              className="flex items-center gap-2 rounded-md border p-2 text-sm animate-in fade-in duration-300"
             >
               <DocumentIcon fileType={doc.file_type} />
               <div className="min-w-0 flex-1">

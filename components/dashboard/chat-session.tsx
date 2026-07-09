@@ -178,14 +178,14 @@ function ActiveChat({
           <div
             key={message.id}
             className={cn(
-              "flex",
+              "flex animate-in fade-in slide-in-from-bottom-2 duration-300",
               message.role === "user" ? "justify-end" : "justify-start",
             )}>
             <div
               className={cn(
                 "max-w-[80%] rounded-lg px-3 py-2 text-sm",
                 message.role === "user"
-                  ? "bg-primary text-primary-foreground"
+                  ? "bg-primary text-white"
                   : "bg-muted text-white",
               )}>
               {message.parts.map((part, i) => {
@@ -214,7 +214,7 @@ function ActiveChat({
           </div>
         ))}
         {status === "submitted" && (
-          <p className="text-xs text-muted-foreground">Thinking…</p>
+          <p className="animate-pulse text-xs text-muted-foreground">Thinking…</p>
         )}
         {error && (
           <p className="rounded-md border border-destructive/50 bg-destructive/10 p-2 text-xs text-destructive">

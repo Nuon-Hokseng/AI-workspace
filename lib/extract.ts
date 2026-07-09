@@ -66,9 +66,12 @@ Respond with ONLY a JSON object (no prose, no markdown fences) in this exact sha
 
 Rules:
 - Include every given member exactly once, names spelled exactly as given: ${memberNames.join(", ")}
-- Score only from evidence in the records (what they built, fixed, learned, discussed). A member barely mentioned gets low scores and a summary saying so.
-- "skills": pick 3-6 relevant areas per member (e.g. frontend, backend, database, algorithms, devops, writing).
+- Be strictly evidence-based and calibrated — you are an auditor, not a cheerleader. Do NOT inflate scores or default to "good" numbers. Never invent work that isn't in the records.
+- Score ONLY what the records show for that specific member. Negative evidence (bugs, delays, incomplete or reworked tasks) must lower the score. Praise in the records without concrete delivered work counts for little.
+- A member with no mentions scores 0-10. Barely mentioned or vague mentions: 10-30. Solid evidence of routine work: 40-60. Reserve 70+ for clear, repeated evidence of strong delivery; 90+ should be rare.
+- "skills": pick 3-6 relevant areas per member (e.g. frontend, backend, database, algorithms, devops, writing). Only areas the records actually show them working in.
 - "overall" is your holistic 0-100 judgement, not necessarily the average.
+- The "summary" must cite what the records actually say, including weaknesses.
 
 PROJECT RECORDS:
 ${corpus}`;

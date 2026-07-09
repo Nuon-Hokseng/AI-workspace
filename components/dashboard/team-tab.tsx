@@ -31,7 +31,10 @@ function SkillBar({ label, value }: { label: string; value: number }) {
         <span className="text-muted-foreground">{value}%</span>
       </div>
       <div className="h-2 rounded-full bg-muted">
-        <div className="h-full rounded-full bg-primary" style={{ width: `${value}%` }} />
+        <div
+          className="skill-bar-fill h-full rounded-full bg-primary"
+          style={{ width: `${value}%` }}
+        />
       </div>
     </div>
   );
@@ -142,7 +145,10 @@ export function TeamTab({
           <p className="text-sm text-muted-foreground">No members yet — add your team above.</p>
         )}
         {members.map((member) => (
-          <div key={member.id} className="flex items-center gap-1 rounded-md border">
+          <div
+            key={member.id}
+            className="flex items-center gap-1 rounded-md border animate-in fade-in duration-300"
+          >
             <button
               onClick={() => setDetailMember(member)}
               className="flex min-w-0 flex-1 items-center gap-2 p-2 text-left text-sm hover:bg-accent/50"

@@ -22,18 +22,20 @@ export function ToolsPanel() {
           and Notes stays visible at the bottom regardless of list length. */}
       <div className="flex min-h-0 flex-1 flex-col p-3">
         <Tabs value={tab} onValueChange={setTab} className="flex min-h-0 flex-1 flex-col">
+          {/* min-w-0 + truncate so four tabs degrade gracefully on narrow
+              (half-laptop) widths instead of overlapping. */}
           <TabsList className="w-full">
-            <TabsTrigger className="flex-1" value="documents">
+            <TabsTrigger className="min-w-0 flex-1 truncate px-2" value="documents">
               Documents
             </TabsTrigger>
-            <TabsTrigger className="flex-1" value="links">
+            <TabsTrigger className="min-w-0 flex-1 truncate px-2" value="links">
               Links
             </TabsTrigger>
-            <TabsTrigger className="flex-1" value="log">
+            <TabsTrigger className="min-w-0 flex-1 truncate px-2" value="log">
               Log
             </TabsTrigger>
-            <TabsTrigger className="flex-1" value="team">
-              Team Performance
+            <TabsTrigger className="min-w-0 flex-1 truncate px-2" value="team" title="Team Performance">
+              Team
             </TabsTrigger>
           </TabsList>
           {/* Every tab pins its controls and scrolls only its list.
@@ -43,25 +45,25 @@ export function ToolsPanel() {
               inactive panels eat the layout. */}
           <TabsContent
             value="documents"
-            className="hidden min-h-0 flex-1 flex-col overflow-hidden data-[state=active]:flex"
+            className="hidden min-h-0 flex-1 flex-col overflow-hidden data-[state=active]:flex data-[state=active]:animate-in data-[state=active]:fade-in data-[state=active]:slide-in-from-bottom-1 data-[state=active]:duration-200"
           >
             <DocumentsTab projectId={activeProjectId} />
           </TabsContent>
           <TabsContent
             value="links"
-            className="hidden min-h-0 flex-1 flex-col overflow-hidden data-[state=active]:flex"
+            className="hidden min-h-0 flex-1 flex-col overflow-hidden data-[state=active]:flex data-[state=active]:animate-in data-[state=active]:fade-in data-[state=active]:slide-in-from-bottom-1 data-[state=active]:duration-200"
           >
             <LinksTab projectId={activeProjectId} />
           </TabsContent>
           <TabsContent
             value="log"
-            className="hidden min-h-0 flex-1 flex-col overflow-hidden data-[state=active]:flex"
+            className="hidden min-h-0 flex-1 flex-col overflow-hidden data-[state=active]:flex data-[state=active]:animate-in data-[state=active]:fade-in data-[state=active]:slide-in-from-bottom-1 data-[state=active]:duration-200"
           >
             <LogTab projectId={activeProjectId} />
           </TabsContent>
           <TabsContent
             value="team"
-            className="hidden min-h-0 flex-1 flex-col overflow-hidden data-[state=active]:flex"
+            className="hidden min-h-0 flex-1 flex-col overflow-hidden data-[state=active]:flex data-[state=active]:animate-in data-[state=active]:fade-in data-[state=active]:slide-in-from-bottom-1 data-[state=active]:duration-200"
           >
             <TeamTab projectId={activeProjectId} active={tab === "team"} />
           </TabsContent>
