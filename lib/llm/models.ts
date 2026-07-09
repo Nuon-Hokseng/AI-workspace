@@ -54,7 +54,17 @@ export const PROVIDERS: ProviderOption[] = [
   {
     id: "moonshot",
     label: "Kimi",
-    models: [{ id: "moonshot-v1-8k", label: "Moonshot v1 8k" }],
+    // Current lineup per platform.kimi.ai/docs/models (July 2026); the
+    // older kimi-k2 series and kimi-latest are discontinued.
+    models: [
+      { id: "kimi-k2.6", label: "Kimi K2.6" },
+      { id: "kimi-k2.5", label: "Kimi K2.5" },
+      { id: "kimi-k2.7-code", label: "Kimi K2.7 Code" },
+      { id: "kimi-k2.7-code-highspeed", label: "Kimi K2.7 Code (fast)" },
+      { id: "moonshot-v1-8k", label: "Moonshot v1 8k" },
+      { id: "moonshot-v1-32k", label: "Moonshot v1 32k" },
+      { id: "moonshot-v1-128k", label: "Moonshot v1 128k" },
+    ],
   },
 ];
 

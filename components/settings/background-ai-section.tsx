@@ -3,10 +3,17 @@
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
+  SelectLabel,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  OLLAMA_PROVIDER_ID,
+  OLLAMA_PROVIDER_LABEL,
+  PROVIDERS,
+} from "@/lib/llm/models";
 import {
   useBackgroundAiStore,
   type BackgroundAiProvider,
@@ -14,57 +21,65 @@ import {
 import { useOllamaStore } from "@/lib/store/ollama-store";
 
 export function BackgroundAiSection() {
-  const { provider, ollamaModel, setProvider, setOllamaModel } = useBackgroundAiStore();
+  const { provider, model, setChoice } = useBackgroundAiStore();
   const ollamaModels = useOllamaStore((s) => s.models);
 
   return (
     <div className="space-y-3 rounded-md border p-3">
       <p className="text-xs text-muted-foreground">
-        When you save a note, this model silently scans it and files what it finds:
-        links go to the Links tab, work progress goes to the Log tab, and everything
-        is remembered in that project&apos;s memory only. Gemini uses the API key saved
-        above; Ollama runs locally with no key.
+        This model silently digests saved notes (links → Links tab, progress → Log tab,
+        everything into that project&apos;s memory) and scores Team Performance. Cloud
+        models use the matching API key saved above; Ollama runs locally with no key.
       </p>
 
       <div className="flex items-center justify-between gap-2">
-        <span className="text-sm">Provider</span>
+        <span className="text-sm">Model</span>
         <Select
-          value={provider}
-          onValueChange={(v) => setProvider(v as BackgroundAiProvider)}
+          value={provider === "off" ? "off" : `${provider}:${model}`}
+          onValueChange={(value) => {
+            if (value === "off") {
+              setChoice("off", "");
+              return;
+            }
+            // First colon only -- Ollama model ids are themselves "name:tag".
+            const i = value.indexOf(":");
+            setChoice(value.slice(0, i) as BackgroundAiProvider, value.slice(i + 1));
+          }}
         >
-          <SelectTrigger className="w-48">
-            <SelectValue />
+          <SelectTrigger className="w-64">
+            <SelectValue placeholder="Pick a model" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="google">Gemini (cloud)</SelectItem>
-            <SelectItem value="ollama">Ollama (local)</SelectItem>
-            <SelectItem value="off">Off</SelectItem>
+            <SelectItem value="off">Off (no background AI)</SelectItem>
+            {PROVIDERS.map((p) => (
+              <SelectGroup key={p.id}>
+                <SelectLabel>{p.label}</SelectLabel>
+                {p.models.map((m) => (
+                  <SelectItem key={m.id} value={`${p.id}:${m.id}`}>
+                    {m.label}
+                  </SelectItem>
+                ))}
+              </SelectGroup>
+            ))}
+            {ollamaModels.length > 0 && (
+              <SelectGroup>
+                <SelectLabel>{OLLAMA_PROVIDER_LABEL}</SelectLabel>
+                {ollamaModels.map((m) => (
+                  <SelectItem key={m} value={`${OLLAMA_PROVIDER_ID}:${m}`}>
+                    {m}
+                  </SelectItem>
+                ))}
+              </SelectGroup>
+            )}
           </SelectContent>
         </Select>
       </div>
 
-      {provider === "ollama" && (
-        <div className="flex items-center justify-between gap-2">
-          <span className="text-sm">Local model</span>
-          {ollamaModels.length > 0 ? (
-            <Select value={ollamaModel} onValueChange={setOllamaModel}>
-              <SelectTrigger className="w-48">
-                <SelectValue placeholder="Pick a model" />
-              </SelectTrigger>
-              <SelectContent>
-                {ollamaModels.map((m) => (
-                  <SelectItem key={m} value={m}>
-                    {m}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          ) : (
-            <span className="text-xs text-muted-foreground">
-              Scan for local models in the Ollama section below first.
-            </span>
-          )}
-        </div>
+      {ollamaModels.length === 0 && (
+        <p className="text-xs text-muted-foreground">
+          Local models missing? Scan for them in the Ollama section below and they&apos;ll
+          appear in this list.
+        </p>
       )}
     </div>
   );

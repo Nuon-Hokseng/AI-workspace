@@ -7,8 +7,7 @@ import { buildExtractionPrompt, findUrls, parseExtraction, type Extraction } fro
 import { getModel } from "@/lib/llm/providers";
 import { indexContent } from "@/lib/rag";
 
-// Cheap and fast — background extraction never needs a frontier model.
-const EXTRACTION_MODEL = "gemini-2.0-flash";
+import { isKnownProvider } from "@/lib/llm/models";
 
 // Insert-if-new links, scoped to one project. No unique constraint:
 // ponytail: not-exists check races under concurrent writes; single-user
@@ -53,21 +52,25 @@ export async function saveNoteExtraction(
   }
 }
 
-// Gemini background pass over a saved note. Silent by design: no key, a
-// failed call, or unparseable output all just mean "nothing extracted".
+// Cloud background pass over a saved note, using whichever provider/model
+// the Background AI setting picked. Silent by design: no key, a failed
+// call, or unparseable output all just mean "nothing extracted".
 export async function runCloudExtraction(
   projectId: string,
   noteText: string,
-  noteId?: string,
+  noteId: string | undefined,
+  provider: string,
+  model: string,
 ) {
   try {
+    if (!isKnownProvider(provider)) return;
     const [savedKey] = await sql<{ encrypted_key: string }[]>`
-      select encrypted_key from api_keys where provider = 'google'
+      select encrypted_key from api_keys where provider = ${provider}
     `;
     if (!savedKey) return;
 
     const { text } = await generateText({
-      model: getModel("google", EXTRACTION_MODEL, decrypt(savedKey.encrypted_key)),
+      model: getModel(provider, model, decrypt(savedKey.encrypted_key)),
       prompt: buildExtractionPrompt(noteText),
     });
     await saveNoteExtraction(projectId, parseExtraction(text), noteId);

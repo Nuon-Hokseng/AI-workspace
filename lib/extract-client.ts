@@ -37,21 +37,19 @@ export async function runBackgroundExtraction(
   noteText: string,
   noteId?: string,
 ) {
-  const { provider, ollamaModel } = useBackgroundAiStore.getState();
-  if (provider === "off" || !noteText.trim()) return;
+  const { provider, model } = useBackgroundAiStore.getState();
+  if (provider === "off" || !model || !noteText.trim()) return;
 
   try {
-    if (provider === "google") {
-      await runCloudExtraction(projectId, noteText, noteId);
+    if (provider === "ollama") {
+      // Ollama: same browser-to-localhost path as chat (the server can't
+      // reach the user's machine), then persist via server action.
+      const raw = await ollamaComplete(model, buildExtractionPrompt(noteText));
+      if (raw === null) return;
+      await saveNoteExtraction(projectId, parseExtraction(raw), noteId);
       return;
     }
-
-    // Ollama: same browser-to-localhost path as chat (the server can't
-    // reach the user's machine), then persist via server action.
-    if (!ollamaModel) return;
-    const raw = await ollamaComplete(ollamaModel, buildExtractionPrompt(noteText));
-    if (raw === null) return;
-    await saveNoteExtraction(projectId, parseExtraction(raw), noteId);
+    await runCloudExtraction(projectId, noteText, noteId, provider, model);
   } catch (err) {
     console.error("Background extraction failed (non-fatal):", err);
   }
@@ -61,24 +59,22 @@ export async function runBackgroundExtraction(
 // Returns true when an analysis actually ran (so the tab knows whether to
 // explain why nothing changed).
 export async function runTeamAnalysis(projectId: string): Promise<boolean> {
-  const { provider, ollamaModel } = useBackgroundAiStore.getState();
-  if (provider === "off") return false;
+  const { provider, model } = useBackgroundAiStore.getState();
+  if (provider === "off" || !model) return false;
 
   try {
-    if (provider === "google") {
-      await analyzeTeamCloud(projectId);
+    if (provider === "ollama") {
+      const [members, corpus] = await Promise.all([
+        getMembers(projectId),
+        getPerformanceCorpus(projectId),
+      ]);
+      if (members.length === 0) return false;
+      const raw = await ollamaComplete(model, buildTeamPrompt(members.map((m) => m.name), corpus));
+      if (raw === null) return false;
+      await saveTeamAnalysis(projectId, parseTeamAnalysis(raw));
       return true;
     }
-
-    if (!ollamaModel) return false;
-    const [members, corpus] = await Promise.all([
-      getMembers(projectId),
-      getPerformanceCorpus(projectId),
-    ]);
-    if (members.length === 0) return false;
-    const raw = await ollamaComplete(ollamaModel, buildTeamPrompt(members.map((m) => m.name), corpus));
-    if (raw === null) return false;
-    await saveTeamAnalysis(projectId, parseTeamAnalysis(raw));
+    await analyzeTeamCloud(projectId, provider, model);
     return true;
   } catch (err) {
     console.error("Team analysis failed (non-fatal):", err);

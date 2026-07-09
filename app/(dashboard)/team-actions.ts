@@ -8,6 +8,7 @@ import {
   parseTeamAnalysis,
   type MemberAssessment,
 } from "@/lib/extract";
+import { isKnownProvider } from "@/lib/llm/models";
 import { getModel } from "@/lib/llm/providers";
 
 export type MemberSkills = {
@@ -89,23 +90,23 @@ export async function saveTeamAnalysis(projectId: string, assessments: MemberAss
   }
 }
 
-// Same model and silence rules as note extraction: no key or a bad
-// response just means nothing gets updated.
-const ANALYSIS_MODEL = "gemini-2.0-flash";
-
-export async function analyzeTeamCloud(projectId: string) {
+// Same silence rules as note extraction: no key or a bad response just
+// means nothing gets updated. Provider/model come from the Background AI
+// setting.
+export async function analyzeTeamCloud(projectId: string, provider: string, model: string) {
   try {
+    if (!isKnownProvider(provider)) return;
     const members = await getMembers(projectId);
     if (members.length === 0) return;
 
     const [savedKey] = await sql<{ encrypted_key: string }[]>`
-      select encrypted_key from api_keys where provider = 'google'
+      select encrypted_key from api_keys where provider = ${provider}
     `;
     if (!savedKey) return;
 
     const corpus = await getPerformanceCorpus(projectId);
     const { text } = await generateText({
-      model: getModel("google", ANALYSIS_MODEL, decrypt(savedKey.encrypted_key)),
+      model: getModel(provider, model, decrypt(savedKey.encrypted_key)),
       prompt: buildTeamPrompt(members.map((m) => m.name), corpus),
     });
     await saveTeamAnalysis(projectId, parseTeamAnalysis(text));
