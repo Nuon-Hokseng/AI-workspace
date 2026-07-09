@@ -171,7 +171,12 @@ function ActiveChat({
 
   function handleSend() {
     if (!input.trim() && !pendingFiles?.length) return;
-    sendMessage({ text: input, files: pendingFiles ?? undefined });
+    // Fire-and-forget: real failures are already surfaced via useChat's own
+    // `error` state (rendered below). The returned promise only rejects for
+    // internal signal bookkeeping -- most notably when Stop aborts this
+    // exact request -- which isn't a second failure to report, and left
+    // uncaught it's an unhandled rejection Next's dev overlay flags.
+    void sendMessage({ text: input, files: pendingFiles ?? undefined }).catch(() => {});
     setInput("");
     setPendingFiles(null);
     if (fileInputRef.current) fileInputRef.current.value = "";
