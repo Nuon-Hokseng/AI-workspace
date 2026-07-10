@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState, useTransition } from "react";
-import { Paperclip, Pencil, Trash2 } from "lucide-react";
+import { CalendarDays, Paperclip, Pencil, Trash2 } from "lucide-react";
 
 import {
   createNote,
@@ -13,7 +13,12 @@ import {
 import { uploadDocument } from "@/app/(dashboard)/documents-actions";
 import { runBackgroundExtraction, runTeamAnalysis } from "@/lib/extract-client";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { MonthCalendar } from "@/components/ui/month-calendar";
 import { Textarea } from "@/components/ui/textarea";
 import { ListSkeleton } from "@/components/dashboard/list-skeleton";
 import { QueryError } from "@/components/dashboard/query-error";
@@ -110,11 +115,17 @@ export function NotesPanel({ projectId }: { projectId: string | null }) {
       <h3 className="mb-2 text-sm font-semibold">Notes</h3>
 
       <div className="space-y-2">
-        <Input
-          type="date"
-          value={meetingDate}
-          onChange={(e) => setMeetingDate(e.target.value)}
-        />
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="outline" size="sm" className="w-full justify-start gap-2">
+              <CalendarDays className="size-3.5" />
+              {meetingDate}
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start" className="p-0">
+            <MonthCalendar value={meetingDate} onSelect={setMeetingDate} />
+          </DropdownMenuContent>
+        </DropdownMenu>
         <Textarea
           placeholder="Meeting notes…"
           rows={4}

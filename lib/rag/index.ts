@@ -58,7 +58,7 @@ function toVectorLiteral(embedding: number[]): string {
   return `[${embedding.join(",")}]`;
 }
 
-type SourceType = "chat" | "document" | "note" | "log";
+type SourceType = "chat" | "document" | "note" | "log" | "link";
 
 // Best-effort and non-blocking: chunks text, embeds each chunk, and stores
 // it tagged to the project/source. Failures (no key, API error) are

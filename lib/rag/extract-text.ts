@@ -14,5 +14,14 @@ export async function extractText(buffer: Buffer, fileType: string | null): Prom
     return text;
   }
 
+  if (
+    fileType === "application/vnd.openxmlformats-officedocument.wordprocessingml.document" ||
+    fileType === "application/msword"
+  ) {
+    const mammoth = await import("mammoth");
+    const { value } = await mammoth.extractRawText({ buffer });
+    return value;
+  }
+
   return null;
 }

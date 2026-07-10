@@ -1,8 +1,7 @@
 "use server";
 
 import { sql } from "@/lib/db";
-import { extractText } from "@/lib/rag/extract-text";
-import { indexContent } from "@/lib/rag";
+import { ingestDocument } from "@/app/(dashboard)/extract-actions";
 
 export type DocumentRow = {
   id: string;
@@ -32,21 +31,9 @@ export async function uploadDocument(projectId: string, formData: FormData) {
     returning id
   `;
 
-  // Text extraction/indexing is a side effect -- a malformed PDF or a
-  // missing OpenAI key should never fail the upload itself.
-  try {
-    const text = await extractText(buffer, file.type || null);
-    if (text) {
-      await indexContent({
-        projectId,
-        sourceType: "document",
-        sourceId: doc.id,
-        text,
-      });
-    }
-  } catch (err) {
-    console.error("Document text extraction failed (non-fatal):", err);
-  }
+  // Extraction, indexing, and link harvesting are side effects -- a
+  // malformed file or missing key never fails the upload itself.
+  await ingestDocument(projectId, doc.id, buffer, file.type || null);
 }
 
 export async function deleteDocument(id: string) {

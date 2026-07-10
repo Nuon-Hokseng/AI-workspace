@@ -12,7 +12,7 @@ import { formatStreamError } from "@/lib/llm/format-error";
 import { isKnownProvider, PROVIDERS } from "@/lib/llm/models";
 import { getModel } from "@/lib/llm/providers";
 import { indexContent, searchMemory } from "@/lib/rag";
-import { harvestChatLinks } from "@/app/(dashboard)/extract-actions";
+import { harvestChatLinks, ingestDocument } from "@/app/(dashboard)/extract-actions";
 import { buildMemorySystemPrompt } from "@/lib/llm/memory-prompt";
 
 // Below this, an exchange isn't worth spending an embedding call on.
@@ -152,6 +152,17 @@ export async function POST(req: Request) {
 
       // URLs the user shared land in the Links tab automatically.
       await harvestChatLinks(projectId, userText);
+
+      // Chat attachments get the same treatment as Documents-tab uploads:
+      // full text into memory, URLs inside the file into the Links tab.
+      if (attachment && documentId) {
+        await ingestDocument(
+          projectId,
+          documentId,
+          Buffer.from(attachment.base64, "base64"),
+          attachment.mediaType,
+        );
+      }
 
       const exchangeText = `${userText}\n\n${text}`;
       if (exchangeText.length >= MIN_CHARS_TO_INDEX) {

@@ -9,19 +9,93 @@ import { indexContent } from "@/lib/rag";
 
 import { isKnownProvider } from "@/lib/llm/models";
 
-// Insert-if-new links, scoped to one project. No unique constraint:
+const SCRAPE_TIMEOUT_MS = 10000;
+const SCRAPE_CHAR_CAP = 20000;
+
+// Fetch a link's page and index its readable text into project memory.
+// Plain HTML-strip, no headless browser: good enough for docs/articles,
+// silently yields nothing for JS-only pages.
+export async function scrapeAndIndexLink(projectId: string, linkId: string, url: string) {
+  try {
+    const res = await fetch(url, {
+      signal: AbortSignal.timeout(SCRAPE_TIMEOUT_MS),
+      headers: { "User-Agent": "Mozilla/5.0 (project-cookbook link indexer)" },
+    });
+    if (!res.ok || !(res.headers.get("content-type") ?? "").includes("text/html")) return;
+
+    const html = await res.text();
+    const text = html
+      .replace(/<script[\s\S]*?<\/script>/gi, " ")
+      .replace(/<style[\s\S]*?<\/style>/gi, " ")
+      .replace(/<[^>]+>/g, " ")
+      .replace(/&nbsp;/g, " ")
+      .replace(/&amp;/g, "&")
+      .replace(/&lt;/g, "<")
+      .replace(/&gt;/g, ">")
+      .replace(/\s+/g, " ")
+      .trim()
+      .slice(0, SCRAPE_CHAR_CAP);
+    if (!text) return;
+
+    // Re-scrapes replace this link's old chunks instead of piling on.
+    await sql`
+      delete from memory_embeddings where source_type = 'link' and source_id = ${linkId}
+    `;
+    await indexContent({
+      projectId,
+      sourceType: "link",
+      sourceId: linkId,
+      text: `Content of ${url}:\n${text}`,
+    });
+  } catch (err) {
+    console.error("Link scraping failed (non-fatal):", err);
+  }
+}
+
+// Insert-if-new links, scoped to one project; every NEW link's page is
+// scraped into memory. No unique constraint:
 // ponytail: not-exists check races under concurrent writes; single-user
 // app, worst case is a duplicate link row.
-async function saveLinks(projectId: string, links: Extraction["links"]) {
+export async function saveLinks(projectId: string, links: Extraction["links"]) {
   for (const link of links) {
-    await sql`
+    const [inserted] = await sql<{ id: string }[]>`
       insert into project_links (project_id, url, label)
       select ${projectId}, ${link.url}, ${link.label}
       where not exists (
         select 1 from project_links
         where project_id = ${projectId} and url = ${link.url}
       )
+      returning id
     `;
+    if (inserted) {
+      await scrapeAndIndexLink(projectId, inserted.id, link.url);
+    }
+  }
+}
+
+// One pipeline for every uploaded file, wherever it came from (Documents
+// tab, notes attach, chat attachment): extract the full text (txt/pdf/docx),
+// index all of it into project memory, and harvest any URLs inside the
+// document into the Links tab (which scrapes them into memory too).
+export async function ingestDocument(
+  projectId: string,
+  documentId: string,
+  buffer: Buffer,
+  fileType: string | null,
+) {
+  try {
+    const { extractText } = await import("@/lib/rag/extract-text");
+    const text = await extractText(buffer, fileType);
+    if (!text) return;
+
+    await indexContent({ projectId, sourceType: "document", sourceId: documentId, text });
+
+    const urls = findUrls(text);
+    if (urls.length > 0) {
+      await saveLinks(projectId, urls.map((url) => ({ url, label: null })));
+    }
+  } catch (err) {
+    console.error("Document ingestion failed (non-fatal):", err);
   }
 }
 

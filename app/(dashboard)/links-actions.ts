@@ -1,6 +1,7 @@
 "use server";
 
 import { sql } from "@/lib/db";
+import { scrapeAndIndexLink } from "@/app/(dashboard)/extract-actions";
 
 export type LinkRow = {
   id: string;
@@ -21,10 +22,13 @@ export async function getLinks(projectId: string): Promise<LinkRow[]> {
 export async function createLink(projectId: string, url: string, label: string) {
   const trimmedUrl = url.trim();
   if (!trimmedUrl) return;
-  await sql`
+  const [link] = await sql<{ id: string }[]>`
     insert into project_links (project_id, url, label)
     values (${projectId}, ${trimmedUrl}, ${label.trim() || null})
+    returning id
   `;
+  // Pull the page's content into project memory (non-fatal on failure).
+  await scrapeAndIndexLink(projectId, link.id, trimmedUrl);
 }
 
 export async function deleteLink(id: string) {
