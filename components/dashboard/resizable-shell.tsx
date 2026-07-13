@@ -5,10 +5,12 @@ import Link from "next/link";
 import { PanelLeft, Settings } from "lucide-react";
 import type { ImperativePanelHandle } from "react-resizable-panels";
 
+import { DisguiseNotepad } from "@/components/dashboard/disguise-notepad";
 import { ProjectSidebar } from "@/components/dashboard/project-sidebar";
 import { ToolsPanel } from "@/components/dashboard/tools-panel";
 import { Button } from "@/components/ui/button";
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
+import { useDisguiseStore } from "@/lib/store/disguise-store";
 import { cn } from "@/lib/utils";
 import type { Project } from "@/types/project";
 
@@ -25,6 +27,14 @@ export function ResizableShell({
   // dropped while collapsed so the collapse button can still shrink the
   // panel all the way down.
   const [leftCollapsed, setLeftCollapsed] = useState(false);
+  const disguised = useDisguiseStore((s) => s.disguised);
+
+  // Total takeover, not an overlay on top of the real layout -- the sidebar,
+  // chat, and tabs stay fully unmounted while disguised so there's nothing
+  // for an onlooker to notice behind the plain notepad.
+  if (disguised) {
+    return <DisguiseNotepad projects={projects} />;
+  }
 
   return (
     <div className="flex h-svh flex-col">
