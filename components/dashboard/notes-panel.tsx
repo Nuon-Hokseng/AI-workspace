@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState, useTransition } from "react";
-import { CalendarDays, Paperclip, Pencil, Trash2 } from "lucide-react";
+import { CalendarDays, Paperclip, Pencil, Trash2, VenetianMask } from "lucide-react";
 
 import {
   createNote,
@@ -23,6 +23,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { ListSkeleton } from "@/components/dashboard/list-skeleton";
 import { QueryError } from "@/components/dashboard/query-error";
 import { useProjectQuery } from "@/lib/hooks/use-project-query";
+import { useDisguiseStore } from "@/lib/store/disguise-store";
 
 function todayIsoDate() {
   return new Date().toISOString().slice(0, 10);
@@ -30,6 +31,7 @@ function todayIsoDate() {
 
 export function NotesPanel({ projectId }: { projectId: string | null }) {
   const { state, refetch } = useProjectQuery(projectId, getNotes);
+  const setDisguised = useDisguiseStore((s) => s.setDisguised);
   const [isPending, startTransition] = useTransition();
   const [editingId, setEditingId] = useState<string | null>(null);
   const [meetingDate, setMeetingDate] = useState(todayIsoDate());
@@ -112,7 +114,18 @@ export function NotesPanel({ projectId }: { projectId: string | null }) {
 
   return (
     <div className="flex max-h-[60%] min-h-0 flex-col border-t p-3">
-      <h3 className="mb-2 text-sm font-semibold">Notes</h3>
+      <div className="mb-2 flex items-center justify-between">
+        <h3 className="text-sm font-semibold">Notes</h3>
+        <Button
+          size="icon"
+          variant="ghost"
+          className="size-6 text-muted-foreground"
+          title="Disguise as a plain notepad"
+          onClick={() => setDisguised(true)}
+        >
+          <VenetianMask className="size-3.5" />
+        </Button>
+      </div>
 
       <div className="space-y-2">
         <DropdownMenu>
