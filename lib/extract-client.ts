@@ -1,6 +1,7 @@
 "use client";
 
-import { runCloudExtraction, saveNoteExtraction } from "@/app/(dashboard)/extract-actions";
+import { runCloudExtraction, saveNoteExtraction, type LogRow } from "@/app/(dashboard)/extract-actions";
+import { indexClientSide } from "@/lib/embed-client";
 import {
   analyzeTeamCloud,
   getMembers,
@@ -31,28 +32,44 @@ async function ollamaComplete(model: string, prompt: string): Promise<string | n
 
 // Fire-and-forget background pass over a just-saved note, routed by the
 // Background AI setting. Never throws and never blocks the save — the
-// note is already persisted before this runs.
+// note is already persisted before this runs. Returns the log rows the
+// extraction created (regardless of which path produced them) so the
+// caller can also embed the NOTE and those LOGS via Ollama, if configured
+// -- that's orthogonal to which model did the extraction itself.
 export async function runBackgroundExtraction(
   projectId: string,
   noteText: string,
   noteId?: string,
-) {
+): Promise<LogRow[]> {
   const { provider, model } = useBackgroundAiStore.getState();
-  if (provider === "off" || !model || !noteText.trim()) return;
+  let logRows: LogRow[] = [];
 
-  try {
-    if (provider === "ollama") {
-      // Ollama: same browser-to-localhost path as chat (the server can't
-      // reach the user's machine), then persist via server action.
-      const raw = await ollamaComplete(model, buildExtractionPrompt(noteText));
-      if (raw === null) return;
-      await saveNoteExtraction(projectId, parseExtraction(raw), noteId);
-      return;
+  if (provider !== "off" && model && noteText.trim()) {
+    try {
+      if (provider === "ollama") {
+        // Ollama: same browser-to-localhost path as chat (the server can't
+        // reach the user's machine), then persist via server action.
+        const raw = await ollamaComplete(model, buildExtractionPrompt(noteText));
+        if (raw !== null) {
+          logRows = await saveNoteExtraction(projectId, parseExtraction(raw), noteId);
+        }
+      } else {
+        logRows = await runCloudExtraction(projectId, noteText, noteId, provider, model);
+      }
+    } catch (err) {
+      console.error("Background extraction failed (non-fatal):", err);
     }
-    await runCloudExtraction(projectId, noteText, noteId, provider, model);
-  } catch (err) {
-    console.error("Background extraction failed (non-fatal):", err);
   }
+
+  // Ollama memory embedding is a separate concern from which model did the
+  // extraction -- runs whenever no cloud embedding key exists and a local
+  // embedding model is configured, regardless of the branch above.
+  if (noteId) void indexClientSide(projectId, "note", noteId, noteText);
+  for (const log of logRows) {
+    void indexClientSide(projectId, "log", log.id, log.entry);
+  }
+
+  return logRows;
 }
 
 // Team Performance analysis, routed by the same Background AI setting.

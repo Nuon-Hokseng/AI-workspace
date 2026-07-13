@@ -54,8 +54,16 @@ function embedText(embedder: Embedder, value: string) {
 // pgvector's input format for a vector column: "[0.1,0.2,...]" cast via
 // ::vector in the query. postgres.js has no native vector type, so this
 // is passed through as a plain string parameter.
-function toVectorLiteral(embedding: number[]): string {
+export function toVectorLiteral(embedding: number[]): string {
   return `[${embedding.join(",")}]`;
+}
+
+// True when a server-side (cloud) embedder is available. The client checks
+// this before bothering to compute an Ollama embedding itself -- OpenAI/
+// Google, when present, stay the priority path unchanged; Ollama is only
+// ever the fallback when neither cloud key exists.
+export async function hasCloudEmbedder(): Promise<boolean> {
+  return (await getEmbedder()) !== null;
 }
 
 type SourceType = "chat" | "document" | "note" | "log" | "link";
@@ -133,20 +141,32 @@ async function keywordSearchMemory(projectId: string, queryText: string): Promis
 // error) whenever RAG isn't usable right now -- no key, embedding call
 // failed, whatever -- since this is a context-enrichment step, not a
 // required part of sending a chat message.
-export async function searchMemory(projectId: string, queryText: string): Promise<string[]> {
+//
+// `precomputed` lets a caller supply an already-embedded query vector +
+// its tag (e.g. an Ollama embedding computed in the browser, since the
+// server can't reach the user's local Ollama itself) instead of this
+// function resolving a server-side embedder.
+export async function searchMemory(
+  projectId: string,
+  queryText: string,
+  precomputed?: { embedding: number[]; tag: string },
+): Promise<string[]> {
   try {
     if (!queryText.trim()) return [];
-    const embedder = await getEmbedder();
-    if (!embedder) return keywordSearchMemory(projectId, queryText);
 
-    const { embedding } = await embedText(embedder, queryText);
+    const { embedding, tag } = precomputed ?? (await (async () => {
+      const embedder = await getEmbedder();
+      if (!embedder) return { embedding: null, tag: null };
+      return { ...(await embedText(embedder, queryText)), tag: embedder.tag };
+    })());
+    if (!embedding || !tag) return keywordSearchMemory(projectId, queryText);
 
     // Only rows embedded by the same model are comparable -- others go
-    // dormant until their provider's key is saved again.
+    // dormant until their provider's key (or local model) is available again.
     const rows = await sql<{ content_chunk: string }[]>`
       select content_chunk
       from memory_embeddings
-      where project_id = ${projectId} and embedding_model = ${embedder.tag}
+      where project_id = ${projectId} and embedding_model = ${tag}
       order by embedding <-> ${toVectorLiteral(embedding)}::vector
       limit ${MATCH_LIMIT}
     `;

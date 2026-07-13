@@ -99,17 +99,23 @@ export async function ingestDocument(
   }
 }
 
+export type LogRow = { id: string; entry: string };
+
 // Persist what a background extractor found: links to the Links tab, log
 // entries to the Log tab, and each log entry into this project's memory
 // (memory_embeddings is scoped by project_id — nothing crosses projects).
 // When the source was a note, stamp it digested — this only runs after a
-// successful extraction pass, so the stamp never lies.
+// successful extraction pass, so the stamp never lies. Returns the created
+// log rows so a client caller can also embed them via Ollama, if that's
+// configured (see lib/embed-client.ts) -- the cloud embedder attempt above
+// already ran server-side and safely no-ops without a cloud key.
 export async function saveNoteExtraction(
   projectId: string,
   extraction: Extraction,
   noteId?: string,
-) {
+): Promise<LogRow[]> {
   await saveLinks(projectId, extraction.links);
+  const logRows: LogRow[] = [];
   for (const entry of extraction.logs) {
     const [log] = await sql<{ id: string }[]>`
       insert into project_logs (project_id, entry)
@@ -117,6 +123,7 @@ export async function saveNoteExtraction(
       returning id
     `;
     await indexContent({ projectId, sourceType: "log", sourceId: log.id, text: entry });
+    logRows.push({ id: log.id, entry });
   }
   if (noteId) {
     await sql`
@@ -124,6 +131,7 @@ export async function saveNoteExtraction(
       where id = ${noteId} and project_id = ${projectId}
     `;
   }
+  return logRows;
 }
 
 // Cloud background pass over a saved note, using whichever provider/model
@@ -135,21 +143,22 @@ export async function runCloudExtraction(
   noteId: string | undefined,
   provider: string,
   model: string,
-) {
+): Promise<LogRow[]> {
   try {
-    if (!isKnownProvider(provider)) return;
+    if (!isKnownProvider(provider)) return [];
     const [savedKey] = await sql<{ encrypted_key: string }[]>`
       select encrypted_key from api_keys where provider = ${provider}
     `;
-    if (!savedKey) return;
+    if (!savedKey) return [];
 
     const { text } = await generateText({
       model: getModel(provider, model, decrypt(savedKey.encrypted_key)),
       prompt: buildExtractionPrompt(noteText),
     });
-    await saveNoteExtraction(projectId, parseExtraction(text), noteId);
+    return await saveNoteExtraction(projectId, parseExtraction(text), noteId);
   } catch (err) {
     console.error("Background extraction failed (non-fatal):", err);
+    return [];
   }
 }
 
