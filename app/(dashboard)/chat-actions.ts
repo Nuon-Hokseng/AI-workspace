@@ -9,11 +9,60 @@ import { harvestChatLinks } from "@/app/(dashboard)/extract-actions";
 const MIN_CHARS_TO_INDEX = 400;
 
 // Ollama runs the model call client-side, but the vector search and the
-// OpenAI embedding key both have to stay server-side -- this is the Server
+// cloud embedding keys both have to stay server-side -- this is the Server
 // Action lib/llm/ollama-transport.ts calls before it builds the message
-// list to send to Ollama.
-export async function getRelevantContext(projectId: string, queryText: string): Promise<string[]> {
-  return searchMemory(projectId, queryText);
+// list to send to Ollama. `precomputed` lets the Ollama transport pass a
+// query vector IT embedded locally (browser -> localhost), for the case
+// where no cloud embedding key exists -- see lib/embed-client.ts.
+export async function getRelevantContext(
+  projectId: string,
+  queryText: string,
+  precomputed?: { embedding: number[]; tag: string },
+): Promise<string[]> {
+  return searchMemory(projectId, queryText, precomputed);
+}
+
+export type SessionSummaryState = { summary: string | null; summarizedCount: number };
+
+export async function getSessionSummaryState(
+  sessionId: string,
+  projectId: string,
+): Promise<SessionSummaryState> {
+  const [row] = await sql<{ history_summary: string | null; summarized_count: number }[]>`
+    select history_summary, summarized_count from chat_sessions
+    where id = ${sessionId} and project_id = ${projectId}
+  `;
+  return { summary: row?.history_summary ?? null, summarizedCount: row?.summarized_count ?? 0 };
+}
+
+export async function updateSessionSummary(
+  sessionId: string,
+  projectId: string,
+  summary: string,
+  summarizedCount: number,
+) {
+  await sql`
+    update chat_sessions
+    set history_summary = ${summary}, summarized_count = ${summarizedCount}
+    where id = ${sessionId} and project_id = ${projectId}
+  `;
+}
+
+// Every message in this session after the compaction watermark -- the
+// portion that still needs to be considered for folding into the summary,
+// or sent raw to the model if it's short enough not to need folding yet.
+export async function getHistoryTail(
+  sessionId: string,
+  projectId: string,
+  afterCount: number,
+): Promise<{ role: "user" | "assistant"; content: string }[]> {
+  const rows = await sql<{ role: "user" | "assistant"; content: string }[]>`
+    select role, content from chat_messages
+    where session_id = ${sessionId} and project_id = ${projectId}
+    order by created_at asc
+    offset ${afterCount}
+  `;
+  return rows.map((m) => ({ role: m.role, content: decrypt(m.content) }));
 }
 
 export type ChatSessionRow = {

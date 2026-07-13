@@ -40,9 +40,19 @@ import {
   type ProviderId,
 } from "@/lib/llm/models";
 import { createOllamaTransport } from "@/lib/llm/ollama-transport";
+import { embedQueryClientSide, indexClientSide } from "@/lib/embed-client";
 import { useChatModelStore } from "@/lib/store/chat-model-store";
 import { useOllamaStore } from "@/lib/store/ollama-store";
 import { cn } from "@/lib/utils";
+
+// Below this, an exchange isn't worth spending an embedding call on --
+// mirrors the same threshold the server side (route.ts) and the Ollama
+// transport use for their own indexing.
+const MIN_CHARS_TO_INDEX = 400;
+
+function messageText(message: UIMessage): string {
+  return message.parts.filter(isTextUIPart).map((p) => p.text).join("\n");
+}
 
 function rowsToMessages(rows: ChatMessageRow[]): UIMessage[] {
   return rows.map((row) => ({
@@ -133,6 +143,11 @@ function ActiveChat({
   const ollamaModels = useOllamaStore((s) => s.models);
   const isOllama = provider === OLLAMA_PROVIDER_ID;
 
+  // Captures the just-sent user text for the cloud path's onFinish below
+  // (a ref, not the `messages` state, to sidestep any stale-closure
+  // question about which render's `messages` onFinish would otherwise see).
+  const lastSentTextRef = useRef("");
+
   // Cloud providers proxy through /api/chat, which persists the exchange
   // itself after streamText's onFinish. Ollama never touches our server at
   // all -- its transport (created fresh per model/project/session) does
@@ -145,9 +160,27 @@ function ActiveChat({
         ? createOllamaTransport(model, { projectId, sessionId })
         : new DefaultChatTransport({
             api: "/api/chat",
-            prepareSendMessagesRequest: ({ messages }) => ({
-              body: { projectId, sessionId, messages, provider, model },
-            }),
+            prepareSendMessagesRequest: async ({ messages }) => {
+              // Precompute the query embedding here (browser -> localhost)
+              // when no cloud embedding key exists -- this app's server
+              // can't reach the user's local Ollama itself. Cheap no-op
+              // when a cloud key already covers embeddings.
+              const lastMessage = messages[messages.length - 1];
+              const precomputed = lastMessage
+                ? await embedQueryClientSide(messageText(lastMessage))
+                : null;
+              return {
+                body: {
+                  projectId,
+                  sessionId,
+                  messages,
+                  provider,
+                  model,
+                  queryEmbedding: precomputed?.embedding,
+                  queryEmbeddingTag: precomputed?.tag,
+                },
+              };
+            },
           }),
     [isOllama, provider, model, projectId, sessionId],
   );
@@ -156,6 +189,20 @@ function ActiveChat({
     id: sessionId,
     messages: initialMessages,
     transport,
+    onFinish: ({ message }) => {
+      // Ollama chat handles its own memory indexing internally (see
+      // ollama-transport.ts) since it never touches this server at all.
+      // For cloud providers, the exchange is generated server-side, so
+      // this is the one place the browser learns it finished -- the spot
+      // to also embed it via Ollama, when that's configured and no cloud
+      // embedding key exists (purely additive; the server already tried
+      // its own cloud-key embedding attempt in route.ts's onFinish).
+      if (isOllama || !lastSentTextRef.current) return;
+      const exchangeText = `${lastSentTextRef.current}\n\n${messageText(message)}`;
+      if (exchangeText.length >= MIN_CHARS_TO_INDEX) {
+        void indexClientSide(projectId, "chat", crypto.randomUUID(), exchangeText);
+      }
+    },
   });
 
   const [input, setInput] = useState("");
@@ -168,9 +215,6 @@ function ActiveChat({
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [highlightId, setHighlightId] = useState<string | null>(null);
-
-  const messageText = (message: UIMessage) =>
-    message.parts.filter(isTextUIPart).map((p) => p.text).join("\n");
 
   const query = searchQuery.trim().toLowerCase();
   const searchResults =
@@ -200,6 +244,7 @@ function ActiveChat({
 
   function handleSend() {
     if (!input.trim() && !pendingFiles?.length) return;
+    lastSentTextRef.current = input;
     // Fire-and-forget: real failures are already surfaced via useChat's own
     // `error` state (rendered below). The returned promise only rejects for
     // internal signal bookkeeping -- most notably when Stop aborts this

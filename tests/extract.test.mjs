@@ -7,6 +7,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { parseExtraction, parseTeamAnalysis, findUrls } from "../lib/extract.ts";
+import { planCompaction, SUMMARY_TRIGGER_COUNT, KEEP_RAW_COUNT } from "../lib/llm/history-compact.ts";
 
 test("parseExtraction handles fenced JSON", () => {
   const raw = '```json\n{"links":[{"url":"https://nestjs.com","label":"NestJS"}],"logs":["Set up dev environment"]}\n```';
@@ -30,6 +31,22 @@ test("parseTeamAnalysis clamps percentages and survives garbage", () => {
   for (const bad of ["", "nope", '{"members":"x"}', '{"members":[{"overall":50}]}']) {
     assert.deepEqual(parseTeamAnalysis(bad), []);
   }
+});
+
+test("planCompaction leaves short tails untouched", () => {
+  const tail = Array.from({ length: SUMMARY_TRIGGER_COUNT }, (_, i) => i);
+  const { toFold, rawTail } = planCompaction(tail);
+  assert.deepEqual(toFold, []);
+  assert.deepEqual(rawTail, tail);
+});
+
+test("planCompaction folds everything except the last KEEP_RAW_COUNT once over the trigger", () => {
+  const tail = Array.from({ length: SUMMARY_TRIGGER_COUNT + 1 }, (_, i) => i);
+  const { toFold, rawTail } = planCompaction(tail);
+  assert.equal(toFold.length, tail.length - KEEP_RAW_COUNT);
+  assert.equal(rawTail.length, KEEP_RAW_COUNT);
+  // No gap, no overlap, no reordering across the split.
+  assert.deepEqual([...toFold, ...rawTail], tail);
 });
 
 test("findUrls dedupes and strips trailing punctuation", () => {

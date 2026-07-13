@@ -3,6 +3,7 @@ import { ArrowLeft } from "lucide-react";
 
 import { ApiKeysManager } from "@/components/settings/api-keys-manager";
 import { BackgroundAiSection } from "@/components/settings/background-ai-section";
+import { EmbeddingSection } from "@/components/settings/embedding-section";
 import { OllamaSection } from "@/components/settings/ollama-section";
 import { Button } from "@/components/ui/button";
 
@@ -31,6 +32,11 @@ export default function SettingsPage() {
       <section className="space-y-2">
         <h2 className="text-sm font-semibold text-muted-foreground">Background AI</h2>
         <BackgroundAiSection />
+      </section>
+
+      <section className="space-y-2">
+        <h2 className="text-sm font-semibold text-muted-foreground">Memory Embeddings</h2>
+        <EmbeddingSection />
       </section>
 
       <section className="space-y-2">

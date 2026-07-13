@@ -13,7 +13,13 @@ import { isKnownProvider, PROVIDERS } from "@/lib/llm/models";
 import { getModel } from "@/lib/llm/providers";
 import { indexContent, searchMemory } from "@/lib/rag";
 import { harvestChatLinks, ingestDocument } from "@/app/(dashboard)/extract-actions";
+import {
+  getHistoryTail,
+  getSessionSummaryState,
+  updateSessionSummary,
+} from "@/app/(dashboard)/chat-actions";
 import { buildMemorySystemPrompt } from "@/lib/llm/memory-prompt";
+import { planCompaction, summarizeHistory } from "@/lib/llm/history-compact";
 
 // Below this, an exchange isn't worth spending an embedding call on.
 const MIN_CHARS_TO_INDEX = 400;
@@ -21,13 +27,19 @@ const MIN_CHARS_TO_INDEX = 400;
 export const maxDuration = 60;
 
 export async function POST(req: Request) {
-  const { projectId, sessionId, messages, provider, model } = (await req.json()) as {
-    projectId?: string;
-    sessionId?: string;
-    messages?: UIMessage[];
-    provider?: string;
-    model?: string;
-  };
+  const { projectId, sessionId, messages, provider, model, queryEmbedding, queryEmbeddingTag } =
+    (await req.json()) as {
+      projectId?: string;
+      sessionId?: string;
+      messages?: UIMessage[];
+      provider?: string;
+      model?: string;
+      // Precomputed in the browser via Ollama when no cloud embedding key
+      // exists -- this server can't reach the user's local Ollama itself
+      // to embed the query on its own. See lib/embed-client.ts.
+      queryEmbedding?: number[];
+      queryEmbeddingTag?: string;
+    };
 
   if (!projectId || !sessionId || !messages?.length || !provider || !model) {
     return new Response(
@@ -66,14 +78,32 @@ export async function POST(req: Request) {
   // Prior context is always rebuilt from the DB, scoped by BOTH ids -- the
   // client-sent `messages` array is only ever used below for the newest
   // turn's content, never trusted as a source of history.
-  const historyRows = await sql<{ role: "user" | "assistant"; content: string }[]>`
-    select role, content
-    from chat_messages
-    where session_id = ${sessionId} and project_id = ${projectId}
-    order by created_at asc
-  `;
-  // content is encrypted at rest -- decrypted only in memory, for this request.
-  const history = historyRows.map((m) => ({ role: m.role, content: decrypt(m.content) }));
+  //
+  // Unbounded history would resend the entire conversation on every single
+  // turn -- growing cost roughly with the square of message count, and
+  // eventually blowing the model's context window outright. Instead: only
+  // the tail since the last compaction watermark is sent raw; anything
+  // older lives folded into a running summary. Reuses THIS request's own
+  // chat model for the fold (piggybacking on a model the user is already
+  // using), so it works regardless of the Background AI setting.
+  const { summary: savedSummary, summarizedCount } = await getSessionSummaryState(sessionId, projectId);
+  const tail = await getHistoryTail(sessionId, projectId, summarizedCount);
+
+  let history = tail;
+  let historySummary = savedSummary;
+  const { toFold, rawTail } = planCompaction(tail);
+  if (toFold.length > 0) {
+    try {
+      const newSummary = await summarizeHistory(getModel(provider, model, apiKey), savedSummary, toFold);
+      await updateSessionSummary(sessionId, projectId, newSummary, summarizedCount + toFold.length);
+      historySummary = newSummary;
+      history = rawTail;
+    } catch (err) {
+      // Not fatal -- the raw tail just stays uncompacted this turn and
+      // gets another chance to fold on the next message.
+      console.error("History compaction failed (non-fatal):", err);
+    }
+  }
 
   const lastMessage = messages[messages.length - 1];
   const userText = lastMessage.parts.filter(isTextUIPart).map((p) => p.text).join("\n");
@@ -87,26 +117,57 @@ export async function POST(req: Request) {
     };
   }
 
-  const currentMessage: ModelMessage = attachment
-    ? {
-        role: "user",
-        content: [
-          { type: "text", text: userText },
-          {
-            type: "file",
-            mediaType: attachment.mediaType,
-            filename: filePart?.filename,
-            data: attachment.base64,
-          },
-        ],
+  // Only images and PDFs are things every provider's API can actually read
+  // as an attached file -- a spreadsheet or Word doc sent that way is
+  // either rejected or silently unreadable to the model. For any type this
+  // app can extract text from (docx, xlsx/ods, plain text -- see
+  // lib/rag/extract-text.ts), that text is put directly in THIS message
+  // instead, so the model can answer about it on the very turn it's
+  // attached rather than only via memory search on a later turn.
+  const NATIVELY_READABLE = /^image\/|^application\/pdf$/;
+  let currentMessage: ModelMessage = { role: "user", content: userText };
+  if (attachment) {
+    const { mediaType } = attachment;
+    const buffer = Buffer.from(attachment.base64, "base64");
+    let extractedText: string | null = null;
+    if (!NATIVELY_READABLE.test(mediaType)) {
+      try {
+        const { extractText } = await import("@/lib/rag/extract-text");
+        extractedText = await extractText(buffer, mediaType);
+      } catch (err) {
+        console.error("Inline attachment extraction failed (non-fatal):", err);
       }
-    : { role: "user", content: userText };
+    }
+
+    currentMessage = extractedText
+      ? {
+          role: "user",
+          content: `${userText}\n\n[Attached file: ${filePart?.filename ?? "upload"}]\n${extractedText}`,
+        }
+      : {
+          role: "user",
+          content: [
+            { type: "text", text: userText },
+            {
+              type: "file",
+              mediaType: attachment.mediaType,
+              filename: filePart?.filename,
+              data: attachment.base64,
+            },
+          ],
+        };
+  }
 
   // Per-project memory: top matches for the current message, prepended as
-  // context. searchMemory returns [] whenever RAG isn't usable (no OpenAI
-  // key saved, embedding call failed, etc) rather than throwing -- this is
-  // an enrichment step, not a requirement for sending a message.
-  const relevantChunks = await searchMemory(projectId, userText);
+  // context. searchMemory returns [] whenever RAG isn't usable (no cloud
+  // key and no precomputed vector, embedding call failed, etc) rather than
+  // throwing -- this is an enrichment step, not a requirement for sending
+  // a message.
+  const relevantChunks = await searchMemory(
+    projectId,
+    userText,
+    queryEmbedding && queryEmbeddingTag ? { embedding: queryEmbedding, tag: queryEmbeddingTag } : undefined,
+  );
 
   const modelMessages: ModelMessage[] = [
     ...history.map((m): ModelMessage => ({ role: m.role, content: m.content })),
@@ -132,7 +193,7 @@ export async function POST(req: Request) {
     model: getModel(provider, model, apiKey),
     // AI SDK v7: system text must go in `instructions`, not a system
     // message (same as the Ollama transport).
-    instructions: buildMemorySystemPrompt(relevantChunks),
+    instructions: buildMemorySystemPrompt(relevantChunks, historySummary),
     messages: modelMessages,
     onFinish: async ({ text, usage }) => {
       await sql`
