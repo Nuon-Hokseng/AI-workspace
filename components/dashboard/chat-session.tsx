@@ -424,7 +424,13 @@ function ActiveChat({
           <input
             ref={fileInputRef}
             type="file"
-            accept="image/*,application/pdf"
+            // Matches everything lib/rag/extract-text.ts can actually read
+            // (images and PDF go straight to the model; text/docx/xlsx/ods
+            // get extracted and injected as text -- see route.ts). File
+            // extensions are listed alongside MIME types since some
+            // OS/browser combos report an unreliable or empty `type` for
+            // less common formats like .md.
+            accept="image/*,application/pdf,text/*,.md,.txt,.csv,.json,.docx,.doc,.xlsx,.xls,.ods"
             multiple
             className="hidden"
             onChange={(e) => setPendingFiles(e.target.files)}
